@@ -200,6 +200,9 @@ static bool drawMinigameToggle(const Control::Descriptor* d, Control::Surface)
     if (!ImGui::IsItemHovered())
         return changed;
     switch (t) {
+    case Cheats::Minigames::ROLLGOAL_INSTANT_WIN:
+        ImGui::SetTooltip("Hena awards the win as soon as a Rollgoal round starts. Normal rewards and progression are preserved.");
+        break;
     case Cheats::Minigames::RAPIDS_NO_LOSS:
         ImGui::SetTooltip("Hitting rocks and walls no longer costs a point.");
         break;
@@ -362,6 +365,7 @@ void RegisterGameplayControls()
         "Gameplay / Minigames / STAR Game",
         "Gameplay / Minigames / Rapids Ride",
         "Gameplay / Minigames / Goat Herding",
+        "Gameplay / Minigames / Rollgoal",
         "Gameplay / Minigames / Fruit Pop Flight",
         "Gameplay / Minigames / Sumo Wrestling",
         "Gameplay / Minigames / Timers",
@@ -496,6 +500,8 @@ static void drawMinigamesMenu()
     Control::Draw(ControlId(STAR_INSTANT_WIN), Control::SURFACE_MENU);
     ImGui::SeparatorText("Goat Herding");
     Control::Draw(ControlId(GOAT_INSTANT_WIN), Control::SURFACE_MENU);
+    ImGui::SeparatorText("Rollgoal");
+    Control::Draw(ControlId(ROLLGOAL_INSTANT_WIN), Control::SURFACE_MENU);
     ImGui::SeparatorText("Rapids Ride");
     Control::Draw(ControlId(RAPIDS_NO_LOSS), Control::SURFACE_MENU);
     Control::Draw("gameplay.minigames.rapids_points", Control::SURFACE_MENU);

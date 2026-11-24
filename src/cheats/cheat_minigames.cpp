@@ -11,12 +11,69 @@ volatile uint8_t g_tphdBoatNoPointLossEnabled = 0;
 volatile uint8_t g_tphdBoatPointMultiplier = 1;
 volatile uint8_t g_tphdFreezeTimerEnabled = 0;
 volatile uint8_t g_tphdGoatInstantWinEnabled = 0;
+volatile uint8_t g_tphdRollgoalInstantWinEnabled = 0;
 volatile uint8_t g_tphdFruitComboKeepEnabled = 0;
 volatile uint8_t g_tphdEasySumoEnabled = 0;
 }
 
+extern "C" uint32_t tphdRollgoalInstantWinApply(void* henna, void* mainShop)
+{
+    if (!g_tphdRollgoalInstantWinEnabled || !henna || !mainShop)
+        return 0;
+
+    using SearchCallback = void* (*)(void*, void*);
+    using SearchFunction = void* (*)(SearchCallback, void*);
+
+    // TPHD v81 RPX entry points: fpcM_Search and the Rollgoal-ball predicate.
+    const SearchFunction search = reinterpret_cast<SearchFunction>(0x02AD72ACu);
+    const SearchCallback findBall = reinterpret_cast<SearchCallback>(0x0253E244u);
+    void* const ball = search(findBall, henna);
+    if (!ball)
+        return 0;
+
+    // FSHOP's +0x400C field points to the shared Rollgoal data block.
+    uint8_t* const rollgoalData = *reinterpret_cast<uint8_t**>(
+        static_cast<uint8_t*>(mainShop) + 0x400Cu);
+    if (!rollgoalData)
+        return 0;
+
+    // The original 20 x 5 loop starts its first active flag at data + 0x4300
+    // (0x42A0 + the flag offset 0x60), then visits 100 entries at 0x68-byte strides.
+    volatile uint8_t* activeFlag = rollgoalData + 0x42A0u + 0x60u;
+    for (uint32_t i = 0; i < 100; ++i, activeFlag += 0x68u)
+        *activeFlag = 0;
+
+    // BallEndPos is the game's live goal vector for the selected course.
+    // Teleport the ball there and clear movement so its normal Execute path
+    // recognises the goal and performs the original victory/reward sequence.
+    volatile uint32_t* const endPos = reinterpret_cast<volatile uint32_t*>(0x10138998u);
+    volatile uint32_t* const currentPos = reinterpret_cast<volatile uint32_t*>(
+        static_cast<uint8_t*>(ball) + 0x4D0u);
+    volatile uint32_t* const oldPos = reinterpret_cast<volatile uint32_t*>(
+        static_cast<uint8_t*>(ball) + 0x4BCu);
+    volatile uint32_t* const speed = reinterpret_cast<volatile uint32_t*>(
+        static_cast<uint8_t*>(ball) + 0x4F8u);
+    volatile uint32_t* const delta = reinterpret_cast<volatile uint32_t*>(
+        static_cast<uint8_t*>(ball) + 0x4068u);
+
+    uint32_t goal[3];
+    for (uint32_t i = 0; i < 3; ++i)
+        goal[i] = endPos[i];
+
+    for (uint32_t i = 0; i < 3; ++i) {
+        currentPos[i] = goal[i];
+        oldPos[i] = goal[i];
+        speed[i] = 0;
+        delta[i] = 0;
+    }
+
+    // Leave the ball's course-specific state/timer fields untouched.
+    // Hena and the ball actor already initialise and update those fields.
+    return 1;
+}
 namespace {
 struct TimerFreeze {
+
     void*    timer;
     uint64_t time;
     uint64_t start;
@@ -90,6 +147,7 @@ static const Entry kEntries[TOGGLE_COUNT] = {
     { "STAR Game Instant Win",         "gameplay.minigames.star_instant_win", "gameStarInstantWin" },
     { "Rapids Ride Never Lose Points", "gameplay.minigames.rapids_no_loss",   "gameRapidsNoLoss" },
     { "Goat Herding Instant Win",      "gameplay.minigames.goat_instant_win", "gameGoatInstantWin" },
+    { "Rollgoal Instant Win",          "gameplay.minigames.rollgoal_instant_win", "gameRollgoalInstantWin" },
     { "Fruit Combo Always Doubles",    "gameplay.minigames.fruit_combo_keep", "gameFruitComboKeep" },
     { "Easy Sumo Wrestling",           "gameplay.minigames.easy_sumo",        "gameEasySumo" },
     { "Freeze Timers",                 "gameplay.minigames.freeze_timers",    "gameFreezeTimers" },
@@ -131,6 +189,7 @@ void Tick(bool overlayHoldingPlay)
     publish(&g_tphdBoatNoPointLossEnabled, s_enabled[RAPIDS_NO_LOSS] ? 1 : 0);
     publish(&g_tphdBoatPointMultiplier, (uint8_t)s_rapidsMultiplier);
     publish(&g_tphdGoatInstantWinEnabled, s_enabled[GOAT_INSTANT_WIN] ? 1 : 0);
+    publish(&g_tphdRollgoalInstantWinEnabled, s_enabled[ROLLGOAL_INSTANT_WIN] ? 1 : 0);
     publish(&g_tphdFruitComboKeepEnabled, s_enabled[FRUIT_COMBO_KEEP] ? 1 : 0);
     publish(&g_tphdEasySumoEnabled, s_enabled[EASY_SUMO] ? 1 : 0);
 #ifdef TPHD_TOOLS_EXPERIMENTAL

@@ -31,7 +31,7 @@ _pk_version:
 .int 2
 
 _pk_hook_count:
-.int 81
+.int 82
 
 _pk_clawshot_failure:
 .int clawshot_failure_native
@@ -120,6 +120,8 @@ _pk_timer_freeze:
 .int timer_freeze_native
 _pk_goat_instant_win:
 .int goat_instant_win_native
+_pk_rollgoal_instant_win:
+.int rollgoal_instant_win_native
 _pk_fruit_combo_keep:
 .int fruit_combo_keep_native
 _pk_easy_sumo:
@@ -898,6 +900,18 @@ goat_instant_win_native:
     cmplw r9, r10
     blr
 
+rollgoal_instant_win_hook:
+    lis   r11, _pk_rollgoal_instant_win@ha
+    lwz   r11, _pk_rollgoal_instant_win@l(r11)
+    mtctr r11
+    bctr
+rollgoal_instant_win_native:
+    li    r7, 1
+    li    r11, 20
+    mtctr r11
+    lwz   r11, 0x400C(r23)
+    blr
+
 fruit_combo_keep_hook:
     lis   r11, _pk_fruit_combo_keep@ha
     lwz   r11, _pk_fruit_combo_keep@l(r11)
@@ -1341,6 +1355,7 @@ camera_next_type_b_native:
 0x0287CF54 = bla rapids_gain1_hook
 0x02AC6388 = bla timer_freeze_hook
 0x024A7424 = bla goat_instant_win_hook
+0x02543180 = bla rollgoal_instant_win_hook
 0x026BEEE0 = bla fruit_combo_keep_hook
 0x02667158 = bla easy_sumo_hook
 

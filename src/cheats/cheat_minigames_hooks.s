@@ -10,6 +10,7 @@
 .extern g_tphdGoatInstantWinEnabled
 .extern g_tphdFruitComboKeepEnabled
 .extern g_tphdEasySumoEnabled
+.extern tphdRollgoalInstantWinApply
 
 .global tphdStarGameClearHook
 .type tphdStarGameClearHook, @function
@@ -127,7 +128,87 @@ tphdGoatInstantWinHook:
     blr
 .size tphdGoatInstantWinHook, .-tphdGoatInstantWinHook
 
+.global tphdRollgoalInstantWinStartHook
+.type tphdRollgoalInstantWinStartHook, @function
+tphdRollgoalInstantWinStartHook:
+    stwu 1, -0xF0(1)
+    stw 0, 0x30(1)
+    stw 3, 0x34(1)
+    stw 4, 0x38(1)
+    stw 5, 0x3C(1)
+    stw 6, 0x40(1)
+    stw 8, 0x44(1)
+    stw 9, 0x48(1)
+    stw 10, 0x4C(1)
+    stw 12, 0x50(1)
+    stw 2, 0x54(1)
+    mfcr 0
+    stw 0, 0x58(1)
+    mfxer 0
+    stw 0, 0x5C(1)
+    mflr 0
+    stw 0, 0xF4(1)
+
+    stfd 0, 0x60(1)
+    stfd 1, 0x68(1)
+    stfd 2, 0x70(1)
+    stfd 3, 0x78(1)
+    stfd 4, 0x80(1)
+    stfd 5, 0x88(1)
+    stfd 6, 0x90(1)
+    stfd 7, 0x98(1)
+    stfd 8, 0xA0(1)
+    stfd 9, 0xA8(1)
+    stfd 10, 0xB0(1)
+    stfd 11, 0xB8(1)
+    stfd 12, 0xC0(1)
+    stfd 13, 0xC8(1)
+
+    mr 3, 31
+    mr 4, 23
+    bl tphdRollgoalInstantWinApply
+    xori 7, 3, 1
+
+    lfd 0, 0x60(1)
+    lfd 1, 0x68(1)
+    lfd 2, 0x70(1)
+    lfd 3, 0x78(1)
+    lfd 4, 0x80(1)
+    lfd 5, 0x88(1)
+    lfd 6, 0x90(1)
+    lfd 7, 0x98(1)
+    lfd 8, 0xA0(1)
+    lfd 9, 0xA8(1)
+    lfd 10, 0xB0(1)
+    lfd 11, 0xB8(1)
+    lfd 12, 0xC0(1)
+    lfd 13, 0xC8(1)
+
+    lwz 0, 0x5C(1)
+    mtxer 0
+    lwz 0, 0x58(1)
+    mtcrf 0xFF, 0
+    lwz 2, 0x54(1)
+    lwz 3, 0x34(1)
+    lwz 4, 0x38(1)
+    lwz 5, 0x3C(1)
+    lwz 6, 0x40(1)
+    lwz 8, 0x44(1)
+    lwz 9, 0x48(1)
+    lwz 10, 0x4C(1)
+    lwz 11, 0x400C(23)
+    lwz 12, 0x50(1)
+
+    li 0, 20
+    mtctr 0
+    lwz 0, 0xF4(1)
+    mtlr 0
+    lwz 0, 0x30(1)
+    addi 1, 1, 0xF0
+    blr
+.size tphdRollgoalInstantWinStartHook, .-tphdRollgoalInstantWinStartHook
 .global tphdFruitComboKeepHook
+
 .type tphdFruitComboKeepHook, @function
 tphdFruitComboKeepHook:
     lis 11, g_tphdGameDataDelta@ha

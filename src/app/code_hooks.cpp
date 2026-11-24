@@ -36,6 +36,7 @@ void tphdBoatScoreGain2Hook();
 void tphdBoatScoreGain1Hook();
 void tphdTimerFreezeHook();
 void tphdGoatInstantWinHook();
+void tphdRollgoalInstantWinStartHook();
 void tphdFruitComboKeepHook();
 void tphdEasySumoHook();
 void tphdClimbingSpeedReturnHook();
@@ -133,6 +134,7 @@ static const Site kSites[] = {
     { "rapidsGain1",         0x0287CF54u, 0x39680001u, CALL, tphdBoatScoreGain1Hook },
     { "timerFreeze",         0x02AC6388u, 0x907D0118u, CALL_EXP, tphdTimerFreezeHook },
     { "goatInstantWin",      0x024A7424u, 0x7C095040u, CALL, tphdGoatInstantWinHook },
+    { "rollgoalInstantWin",  0x02543180u, 0x38E00001u, CALL, tphdRollgoalInstantWinStartHook },
     { "fruitComboKeep",      0x026BEEE0u, 0x7C0B0040u, CALL, tphdFruitComboKeepHook },
     { "easySumo",            0x02667158u, 0x83E1000Cu, CALL, tphdEasySumoHook },
 
