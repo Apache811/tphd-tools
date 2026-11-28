@@ -16,64 +16,78 @@ volatile uint8_t g_tphdFruitComboKeepEnabled = 0;
 volatile uint8_t g_tphdEasySumoEnabled = 0;
 }
 
-extern "C" uint32_t tphdRollgoalInstantWinApply(void* henna, void* mainShop)
+namespace {
+// TPHD v81 RPX addresses and actor field offsets used by the Rollgoal instant win.
+// All three regions share the same executable, so one set of values covers them.
+namespace RollgoalHd {
+constexpr uintptr_t kSearchActor      = 0x02AD72ACu; // fpcM_Search(callback, userData)
+constexpr uintptr_t kIsBallPredicate  = 0x0253E244u; // matches the FSHOP actor with param 0x23 (the ball)
+constexpr uintptr_t kSetHennaPlaying  = 0x02540660u; // (henna, flag): writes the "round running" byte and
+                                                     // runs the side effects that go with it
+
+// Hena actor.
+constexpr uint32_t kHennaCamMode      = 0x756u; // s16, state machine selector
+constexpr uint32_t kHennaStateTimer   = 0x758u; // s16, frame counter of the current state
+constexpr uint32_t kHennaPlaying      = 0x7BDu; // u8, written only through kSetHennaPlaying
+
+// Ball actor.
+constexpr uint32_t kBallResultState   = 0x56Bu; // s8, 0 rolling, 1 fell, 2 round already resolved
+
+// Value the game itself writes when the ball reaches the goal with every path section visited.
+// Note: reaching the goal with unvisited sections instead sets health = 3 and cam_mode = 0x49,
+// which makes Hena say the player cheated. That is the opposite of what this cheat wants.
+constexpr int16_t kCamModeWin         = 0x4Cu;
+constexpr int8_t  kBallResolved       = 2;
+
+template <typename T>
+inline volatile T& field(void* object, uint32_t offset)
 {
-    if (!g_tphdRollgoalInstantWinEnabled || !henna || !mainShop)
-        return 0;
+    return *reinterpret_cast<volatile T*>(static_cast<uint8_t*>(object) + offset);
+}
+} // namespace RollgoalHd
+} // namespace
+
+// Called once per round, right after the timer starts and Hena marks the round as running.
+// It reproduces the exact state change the ball performs when it reaches the goal
+// (see the win branch of the ball's Execute), so Hena's own win handling does the rest:
+// stop the timer, play the jingle, pay the reward and unlock the next level.
+extern "C" void tphdRollgoalInstantWinApply(void* henna)
+{
+    using namespace RollgoalHd;
+
+    if (!g_tphdRollgoalInstantWinEnabled || !henna)
+        return;
+
+    // Only act on a round that is actually running.
+    if (field<uint8_t>(henna, kHennaPlaying) == 0)
+        return;
 
     using SearchCallback = void* (*)(void*, void*);
     using SearchFunction = void* (*)(SearchCallback, void*);
+    using SetPlayingFunction = void (*)(void*, uint32_t);
 
-    // TPHD v81 RPX entry points: fpcM_Search and the Rollgoal-ball predicate.
-    const SearchFunction search = reinterpret_cast<SearchFunction>(0x02AD72ACu);
-    const SearchCallback findBall = reinterpret_cast<SearchCallback>(0x0253E244u);
-    void* const ball = search(findBall, henna);
+    const SearchFunction search = reinterpret_cast<SearchFunction>(kSearchActor);
+    const SearchCallback isBall = reinterpret_cast<SearchCallback>(kIsBallPredicate);
+    void* const ball = search(isBall, henna);
     if (!ball)
-        return 0;
+        return;
 
-    // FSHOP's +0x400C field points to the shared Rollgoal data block.
-    uint8_t* const rollgoalData = *reinterpret_cast<uint8_t**>(
-        static_cast<uint8_t*>(mainShop) + 0x400Cu);
-    if (!rollgoalData)
-        return 0;
+    // Do not resolve a round twice.
+    if (field<int8_t>(ball, kBallResultState) != 0)
+        return;
 
-    // The original 20 x 5 loop starts its first active flag at data + 0x4300
-    // (0x42A0 + the flag offset 0x60), then visits 100 entries at 0x68-byte strides.
-    volatile uint8_t* activeFlag = rollgoalData + 0x42A0u + 0x60u;
-    for (uint32_t i = 0; i < 100; ++i, activeFlag += 0x68u)
-        *activeFlag = 0;
+    field<int16_t>(henna, kHennaCamMode)    = kCamModeWin;
+    field<int16_t>(henna, kHennaStateTimer) = 0;
 
-    // BallEndPos is the game's live goal vector for the selected course.
-    // Teleport the ball there and clear movement so its normal Execute path
-    // recognises the goal and performs the original victory/reward sequence.
-    volatile uint32_t* const endPos = reinterpret_cast<volatile uint32_t*>(0x10138998u);
-    volatile uint32_t* const currentPos = reinterpret_cast<volatile uint32_t*>(
-        static_cast<uint8_t*>(ball) + 0x4D0u);
-    volatile uint32_t* const oldPos = reinterpret_cast<volatile uint32_t*>(
-        static_cast<uint8_t*>(ball) + 0x4BCu);
-    volatile uint32_t* const speed = reinterpret_cast<volatile uint32_t*>(
-        static_cast<uint8_t*>(ball) + 0x4F8u);
-    volatile uint32_t* const delta = reinterpret_cast<volatile uint32_t*>(
-        static_cast<uint8_t*>(ball) + 0x4068u);
+    // Must go through the game function: it clears the running flag and also performs
+    // the related teardown, which a plain byte write would skip.
+    reinterpret_cast<SetPlayingFunction>(kSetHennaPlaying)(henna, 0);
 
-    uint32_t goal[3];
-    for (uint32_t i = 0; i < 3; ++i)
-        goal[i] = endPos[i];
-
-    for (uint32_t i = 0; i < 3; ++i) {
-        currentPos[i] = goal[i];
-        oldPos[i] = goal[i];
-        speed[i] = 0;
-        delta[i] = 0;
-    }
-
-    // Leave the ball's course-specific state/timer fields untouched.
-    // Hena and the ball actor already initialise and update those fields.
-    return 1;
+    field<int8_t>(ball, kBallResultState) = kBallResolved;
 }
+
 namespace {
 struct TimerFreeze {
-
     void*    timer;
     uint64_t time;
     uint64_t start;

@@ -165,9 +165,7 @@ tphdRollgoalInstantWinStartHook:
     stfd 13, 0xC8(1)
 
     mr 3, 31
-    mr 4, 23
     bl tphdRollgoalInstantWinApply
-    xori 7, 3, 1
 
     lfd 0, 0x60(1)
     lfd 1, 0x68(1)
@@ -199,6 +197,8 @@ tphdRollgoalInstantWinStartHook:
     lwz 11, 0x400C(23)
     lwz 12, 0x50(1)
 
+    # Replay the instruction the hook replaced (li r7, 1) and the CTR setup.
+    li 7, 1
     li 0, 20
     mtctr 0
     lwz 0, 0xF4(1)
@@ -208,7 +208,6 @@ tphdRollgoalInstantWinStartHook:
     blr
 .size tphdRollgoalInstantWinStartHook, .-tphdRollgoalInstantWinStartHook
 .global tphdFruitComboKeepHook
-
 .type tphdFruitComboKeepHook, @function
 tphdFruitComboKeepHook:
     lis 11, g_tphdGameDataDelta@ha

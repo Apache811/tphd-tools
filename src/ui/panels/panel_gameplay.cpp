@@ -201,7 +201,7 @@ static bool drawMinigameToggle(const Control::Descriptor* d, Control::Surface)
         return changed;
     switch (t) {
     case Cheats::Minigames::ROLLGOAL_INSTANT_WIN:
-        ImGui::SetTooltip("Hena awards the win as soon as a Rollgoal round starts. Normal rewards and progression are preserved.");
+        ImGui::SetTooltip("Every Rollgoal round is won as soon as its timer starts. Normal rewards and progression are preserved.");
         break;
     case Cheats::Minigames::RAPIDS_NO_LOSS:
         ImGui::SetTooltip("Hitting rocks and walls no longer costs a point.");
