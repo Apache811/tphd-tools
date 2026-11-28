@@ -11,8 +11,79 @@ volatile uint8_t g_tphdBoatNoPointLossEnabled = 0;
 volatile uint8_t g_tphdBoatPointMultiplier = 1;
 volatile uint8_t g_tphdFreezeTimerEnabled = 0;
 volatile uint8_t g_tphdGoatInstantWinEnabled = 0;
+volatile uint8_t g_tphdRollgoalInstantWinEnabled = 0;
 volatile uint8_t g_tphdFruitComboKeepEnabled = 0;
 volatile uint8_t g_tphdEasySumoEnabled = 0;
+}
+
+namespace {
+// TPHD v81 RPX addresses and actor field offsets used by the Rollgoal instant win.
+// All three regions share the same executable, so one set of values covers them.
+namespace RollgoalHd {
+constexpr uintptr_t kSearchActor      = 0x02AD72ACu; // fpcM_Search(callback, userData)
+constexpr uintptr_t kIsBallPredicate  = 0x0253E244u; // matches the FSHOP actor with param 0x23 (the ball)
+constexpr uintptr_t kSetHennaPlaying  = 0x02540660u; // (henna, flag): writes the "round running" byte and
+                                                     // runs the side effects that go with it
+
+// Hena actor.
+constexpr uint32_t kHennaCamMode      = 0x756u; // s16, state machine selector
+constexpr uint32_t kHennaStateTimer   = 0x758u; // s16, frame counter of the current state
+constexpr uint32_t kHennaPlaying      = 0x7BDu; // u8, written only through kSetHennaPlaying
+
+// Ball actor.
+constexpr uint32_t kBallResultState   = 0x56Bu; // s8, 0 rolling, 1 fell, 2 round already resolved
+
+// Value the game itself writes when the ball reaches the goal with every path section visited.
+// Note: reaching the goal with unvisited sections instead sets health = 3 and cam_mode = 0x49,
+// which makes Hena say the player cheated. That is the opposite of what this cheat wants.
+constexpr int16_t kCamModeWin         = 0x4Cu;
+constexpr int8_t  kBallResolved       = 2;
+
+template <typename T>
+inline volatile T& field(void* object, uint32_t offset)
+{
+    return *reinterpret_cast<volatile T*>(static_cast<uint8_t*>(object) + offset);
+}
+} // namespace RollgoalHd
+} // namespace
+
+// Called once per round, right after the timer starts and Hena marks the round as running.
+// It reproduces the exact state change the ball performs when it reaches the goal
+// (see the win branch of the ball's Execute), so Hena's own win handling does the rest:
+// stop the timer, play the jingle, pay the reward and unlock the next level.
+extern "C" void tphdRollgoalInstantWinApply(void* henna)
+{
+    using namespace RollgoalHd;
+
+    if (!g_tphdRollgoalInstantWinEnabled || !henna)
+        return;
+
+    // Only act on a round that is actually running.
+    if (field<uint8_t>(henna, kHennaPlaying) == 0)
+        return;
+
+    using SearchCallback = void* (*)(void*, void*);
+    using SearchFunction = void* (*)(SearchCallback, void*);
+    using SetPlayingFunction = void (*)(void*, uint32_t);
+
+    const SearchFunction search = reinterpret_cast<SearchFunction>(kSearchActor);
+    const SearchCallback isBall = reinterpret_cast<SearchCallback>(kIsBallPredicate);
+    void* const ball = search(isBall, henna);
+    if (!ball)
+        return;
+
+    // Do not resolve a round twice.
+    if (field<int8_t>(ball, kBallResultState) != 0)
+        return;
+
+    field<int16_t>(henna, kHennaCamMode)    = kCamModeWin;
+    field<int16_t>(henna, kHennaStateTimer) = 0;
+
+    // Must go through the game function: it clears the running flag and also performs
+    // the related teardown, which a plain byte write would skip.
+    reinterpret_cast<SetPlayingFunction>(kSetHennaPlaying)(henna, 0);
+
+    field<int8_t>(ball, kBallResultState) = kBallResolved;
 }
 
 namespace {
@@ -90,6 +161,7 @@ static const Entry kEntries[TOGGLE_COUNT] = {
     { "STAR Game Instant Win",         "gameplay.minigames.star_instant_win", "gameStarInstantWin" },
     { "Rapids Ride Never Lose Points", "gameplay.minigames.rapids_no_loss",   "gameRapidsNoLoss" },
     { "Goat Herding Instant Win",      "gameplay.minigames.goat_instant_win", "gameGoatInstantWin" },
+    { "Rollgoal Instant Win",          "gameplay.minigames.rollgoal_instant_win", "gameRollgoalInstantWin" },
     { "Fruit Combo Always Doubles",    "gameplay.minigames.fruit_combo_keep", "gameFruitComboKeep" },
     { "Easy Sumo Wrestling",           "gameplay.minigames.easy_sumo",        "gameEasySumo" },
     { "Freeze Timers",                 "gameplay.minigames.freeze_timers",    "gameFreezeTimers" },
@@ -131,6 +203,7 @@ void Tick(bool overlayHoldingPlay)
     publish(&g_tphdBoatNoPointLossEnabled, s_enabled[RAPIDS_NO_LOSS] ? 1 : 0);
     publish(&g_tphdBoatPointMultiplier, (uint8_t)s_rapidsMultiplier);
     publish(&g_tphdGoatInstantWinEnabled, s_enabled[GOAT_INSTANT_WIN] ? 1 : 0);
+    publish(&g_tphdRollgoalInstantWinEnabled, s_enabled[ROLLGOAL_INSTANT_WIN] ? 1 : 0);
     publish(&g_tphdFruitComboKeepEnabled, s_enabled[FRUIT_COMBO_KEEP] ? 1 : 0);
     publish(&g_tphdEasySumoEnabled, s_enabled[EASY_SUMO] ? 1 : 0);
 #ifdef TPHD_TOOLS_EXPERIMENTAL
